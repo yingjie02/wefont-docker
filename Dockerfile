@@ -7,6 +7,8 @@
 FROM ubuntu:18.04 AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
 SHELL ["/bin/bash", "-c"]
 
 # 1. 换源 + 安装系统依赖（含 Python 3 的 C 扩展包，从 apt 装比 pip 省空间）
@@ -59,6 +61,8 @@ RUN sed -i 's|\$(brew --prefix)/bin/python3|python2.7|g' /workspace/wefont/src/f
 FROM ubuntu:18.04
 
 ENV DEBIAN_FRONTEND=noninteractive
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
 
 # 只装运行必需的包（不包含 git、wget、pip、编译工具）
 RUN sed -i 's/archive.ubuntu.com/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list && \
