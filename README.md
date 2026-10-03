@@ -139,13 +139,26 @@ cp myfont_denoise.ttf /workspace/output/
 
 ### 第五步：合并筛选（高级用法）
 
-如果你发现基础版字体中某些字偏小，可以用去噪版替换这些字：
+基础版和去噪版各有优缺点。你可以**用其中一个作为主字体，另一个作为补充源**，只替换有问题的字。
 
-#### 5.1 找出偏小的字
+#### 🔍 如何判断用哪个方向
 
-安装 `myfont_base.ttf`，在 Word 里逐个输入你写过的字，记下偏小的字。
+先安装两个字体，在 Word 里输入你写过的所有字，对比效果：
 
-#### 5.2 写入筛选文件
+| 观察结果 | 推荐方向 |
+| :--- | :--- |
+| **基础版大多数字正常**，只有少数偏小 | **A：以基础版为主**，用去噪版替换偏小的字 |
+| **去噪版整体更干净**，但少数字的点、顿被误删 | **B：以去噪版为主**，用基础版补回被误删的字 |
+
+#### 方向 A：以基础版为主（基础版 → 去噪版补充）
+
+适用：基础版大多数字没问题，只有少数偏小。
+
+**5A.1 找出偏小的字**
+
+安装 `myfont_base.ttf`，在 Word 里逐个检查，记下偏小的字。
+
+**5A.2 写入筛选文件**
 
 创建 `output/replace.json`：
 
@@ -153,9 +166,59 @@ cp myfont_denoise.ttf /workspace/output/
 ["的", "我", "了", "好", "一", "字"]
 ```
 
-#### 5.3 合并
+**5A.3 合并**
 
-运行容器，挂载工具目录：
+```bash
+python /workspace/tools/replace_glyphs.py \
+    /workspace/output/myfont_base.ttf \
+    /workspace/output/myfont_denoise.ttf \
+    /workspace/output/replace.json \
+    /workspace/output/myfont_final.ttf
+```
+
+#### 方向 B：以去噪版为主（去噪版 → 基础版补充）
+
+适用：去噪版整体更干净，但少数字的点、顿、短笔画被误删。
+
+**5B.1 找出被误删笔画（变差）的字**
+
+安装 `myfont_denoise.ttf`，和 `myfont_base.ttf` 对比，记下变差的字。常见于：
+- 带点的字：`这`、`说`、`过`、`文`、`方`
+- 带顿的字：`力`、`动`、`农`
+- 短笔画字：`三`、`小`、`中`
+
+**5B.2 写入筛选文件**
+
+创建 `output/replace.json`：
+
+```json
+["这", "说", "过", "力", "动"]
+```
+
+**5B.3 合并（注意参数顺序）**
+
+```bash
+python /workspace/tools/replace_glyphs.py \
+    /workspace/output/myfont_denoise.ttf \
+    /workspace/output/myfont_base.ttf \
+    /workspace/output/replace.json \
+    /workspace/output/myfont_final.ttf
+```
+
+#### 📌 合并脚本参数说明
+
+```
+python replace_glyphs.py <主字体> <替换源字体> <筛选文件> <输出字体>
+```
+
+| 参数 | 说明 |
+| :--- | :--- |
+| 第 1 个 | **主字体**，作为最终字体的基础 |
+| 第 2 个 | **替换源**，用它的字去覆盖主字体 |
+| 第 3 个 | **筛选文件**，JSON 数组，列出要替换的字 |
+| 第 4 个 | 输出文件名 |
+
+#### 🔧 运行容器（合并时用）
 
 ```bash
 docker run -it --rm \
@@ -164,23 +227,11 @@ docker run -it --rm \
   ghcr.io/yingjie02/wefont-docker:latest
 ```
 
-容器内：
-
-```bash
-python /workspace/tools/replace_glyphs.py \
-    /workspace/output/myfont_base.ttf \
-    /workspace/output/myfont_denoise.ttf \
-    /workspace/output/replace.json \
-    /workspace/output/myfont_final.ttf
-exit
-```
+> `项目根目录` 是包含 `replace_glyphs.py` 的目录（即本仓库 clone 下来的路径）。
 
 #### 5.4 安装 final 字体
 
-卸载 `myfont_base`，安装 `myfont_final.ttf`。验证：
-
-- 偏小的字应该恢复正常（来自去噪版）
-- 其他字保持原样（来自基础版，笔画未被误伤）
+卸载 `myfont_base` 和 `myfont_denoise`，安装 `myfont_final.ttf`。验证替换效果。
 
 ### 第六步：打补丁（写错字或补充新字）
 
@@ -257,10 +308,15 @@ A：字体已自动修复 name 表和 OS/2 表。如果仍回退，确认：1) �
 A：扫描件二维码不清晰。用扫描仪 300 DPI 以上重新扫描，或手机正对纸面拍照。**不要用截图**。
 
 **Q：基础版和去噪版怎么选？**
-A：先用基础版生成字体，安装后在 Word 里检查。如果所有字大小正常，就用基础版。如果某些字明显偏小，再用去噪版 + `replace_glyphs.py` 替换这些字。
+A：建议先用两个版本各生成一次字体，安装后在 Word 里对比。判断标准：
+- 如果**基础版大多数字正常，少数偏小** → 用方向 A（基础版为主 + 去噪版补充）
+- 如果**去噪版整体更干净，少数笔画被误删** → 用方向 B（去噪版为主 + 基础版补充）
 
 **Q：为什么字体里有些字特别小？**
-A：扫描件里混入了孤立小黑点（噪点），撑大了字形边界框，字体按边界框缩放时字被"稀释"。基础版不处理噪点；去噪版会用连通域分析去掉小噪点。推荐的流程是：基础版为主 + 去噪版替换偏小的字，既能修问题，又不误伤点、顿等笔画。
+A：扫描件里混入了孤立小黑点（噪点），撑大了字形边界框，字体按边界框缩放时字被"稀释"。基础版不处理噪点；去噪版会用连通域分析去掉小噪点。
+
+**Q：替换的字太多，不如全用另一个版本怎么办？**
+A：直接用另一个版本就好。`replace.json` 里字越多，说明你的主字体问题越大，可以考虑换主字体。如果所有字都需要替换，直接安装另一个版本即可。
 
 **Q：为什么生成的字体名是英文的？**
 A：Python 2.7 脚本处理中文文件名会报 `UnicodeDecodeError`。用英文名生成即可。
@@ -277,7 +333,7 @@ A：建议至少 1000 字。完整 GB2312 需要写 6763 字，建议分批进�
 ├── patch_parse_template.py          # 基础版补丁
 ├── patch_parse_template_denoise.py  # 去噪版补丁
 ├── fix_font.py                      # 字体元数据修复
-├── replace_glyphs.py                # 合并脚本（运行时挂载）
+├── replace_glyphs.py                # 字形合并脚本（运行时挂载）
 ├── README.md
 └── .gitignore
 ```
