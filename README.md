@@ -1,3 +1,4 @@
+
 # wefont Docker 镜像
 
 基于 [wefont](https://github.com/wenzhenl/wefont) 的中文字体生成环境，已修复原项目的 macOS 兼容性、二维码识别、字体元数据等问题，并精简至约 487MB。
@@ -9,7 +10,7 @@
 ### 主要特性
 
 - **基础镜像**：Ubuntu 18.04 + venv（精简版，约 487MB）
-- **国内加速**：所有 apt / pip / conda 源已替换为清华源
+- **国内加速**：所有 apt / pip 源已替换为清华源
 - **自动修复**：
   - `forge_my_font.sh` 的 macOS 路径问题
   - 二维码识别（多尺度放大 + 多阈值重试 + 原始灰度图回退）
@@ -18,10 +19,19 @@
 
 ## 🚀 快速开始
 
-### 拉取镜像
+### 从 GHCR 拉取镜像
 
 ```bash
 docker pull ghcr.io/yingjie02/wefont-docker:latest
+```
+
+### 从 tar 文件加载（可选）
+
+如果你拿到的是 `wefont-cn-lite.tar`：
+
+```bash
+docker load -i wefont-cn-lite.tar
+docker tag wefont-cn-lite:latest ghcr.io/yingjie02/wefont-docker:latest
 ```
 
 ### 运行容器
@@ -49,6 +59,23 @@ cp *.pdf /workspace/output/
 
 # 复制到宿主机
 cp 我的字体.ttf /workspace/output/
+```
+
+### 完整示例（以郭襄小诗测试集为例）
+
+```bash
+# 1. 生成模板
+python generate_template.py "config/gb2312_test_测试集_郭襄小诗_.txt"
+# 输出: 20_20_template.pdf
+
+# 2. 复制到 output 目录，打印、手写、扫描
+cp 20_20_template.pdf /workspace/output/
+
+# 3. 将扫描件（如 1.jpg）放入 output 目录后，生成字体
+./forge_my_font.sh guoxiang /workspace/output/1.jpg
+
+# 4. 复制到宿主机
+cp guoxiang.ttf /workspace/output/
 ```
 
 ## 🐳 镜像信息
@@ -93,19 +120,31 @@ docker build -t wefont-cn-lite .
 
 | 类型 | 值 |
 | :--- | :--- |
-| 镜像 Digest | `sha256:推送后填写` |
-| tar 文件 SHA256 | `本地计算后填写` |
+| 镜像 Digest | `sha256:554f81a85b55df973987bf7a876c4540c33c16f1abbfc6d67d585998d2f011a7` |
+| tar 文件 SHA256 | `0AFA6AC81EAD1D120C97D8A2EC7205AD9E04C91B585D38F41FE70E1BC4CF2EEC` |
 
-获取镜像 Digest：
+### 验证镜像完整性
+
+拉取镜像后，用以下命令验证 Digest：
 
 ```bash
 docker buildx imagetools inspect ghcr.io/yingjie02/wefont-docker:latest
 ```
 
-计算 tar 文件 SHA256：
+对比输出的 `Digest` 值是否与上表一致。
 
+### 验证 tar 文件完整性
+
+如果你下载了 `wefont-cn-lite.tar`，可以用以下命令校验：
+
+**Windows PowerShell：**
 ```powershell
 Get-FileHash wefont-cn-lite.tar -Algorithm SHA256
+```
+
+**Linux / macOS：**
+```bash
+sha256sum wefont-cn-lite.tar
 ```
 
 ## 📁 目录结构
