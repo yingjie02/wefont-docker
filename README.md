@@ -1,6 +1,6 @@
 # wefont Docker 镜像
 
-Docker image for **wefont** — 中文个人手写字体生成工具。已修复原项目的 macOS 兼容性、二维码识别、字体元数据、中文 locale 等问题，精简至约 487MB，开箱即用。
+Docker image for **wefont** — 中文个人手写字体生成工具。已修复原项目的 macOS 兼容性、二维码识别、噪点干扰、字体元数据、中文 locale 等问题，精简至约 487MB，开箱即用。
 
 ## 📖 简介
 
@@ -13,6 +13,7 @@ Docker image for **wefont** — 中文个人手写字体生成工具。已修复
 - **自动修复**：
   - `forge_my_font.sh` 的 macOS 路径问题
   - 二维码识别（多尺度放大 + 多阈值重试 + 原始灰度图回退）
+  - 噪点干扰（连通域分析去掉孤立小黑点）
   - 字体 name 表和 OS/2 表（支持中文，Word 可用）
   - Python 3 读取中文文件的 locale 编码问题
 - **精简优化**：删除 matplotlib，多阶段构建，运行阶段不含编译工具
@@ -103,7 +104,7 @@ cp myfont_25.pdf /workspace/output/
    - 如果手机拍照：正对纸面、光线均匀、避免阴影
    - **绝对不要用截图**，会导致二维码无法识别
 4. **命名**：按顺序命名，如 `1.jpg`、`2.jpg`、`3.jpg`
-5. **放回**：将 JPG 文件放入宿主机的 output 目录
+5. **放回**：将 JPG 文件放入宿主机的 `output/input/` 目录
 
 ### 第三步：生成字体
 
@@ -113,13 +114,13 @@ cp myfont_25.pdf /workspace/output/
 cd /workspace/wefont/src
 
 # 单个扫描件
-./forge_my_font.sh myfont /workspace/output/1.jpg
+./forge_my_font.sh myfont /workspace/input/1.jpg
 
 # 多个扫描件
-./forge_my_font.sh myfont /workspace/output/1.jpg /workspace/output/2.jpg /workspace/output/3.jpg
+./forge_my_font.sh myfont /workspace/input/1.jpg /workspace/input/2.jpg /workspace/input/3.jpg
 
 # 或用通配符（注意文件顺序）
-./forge_my_font.sh myfont /workspace/output/*.jpg
+./forge_my_font.sh myfont /workspace/input/*.jpg
 
 # 复制到宿主机
 cp myfont.ttf /workspace/output/
@@ -150,7 +151,7 @@ cp patch.pdf /workspace/output/
 3. 打印、手写、扫描后，用 `patch_my_font.sh` 覆盖：
 
 ```bash
-./patch_my_font.sh myfont.ttf /workspace/output/补丁1.jpg
+./patch_my_font.sh myfont.ttf /workspace/input/补丁1.jpg
 ```
 
 **补充新字**（推荐分批策略）：
@@ -178,6 +179,7 @@ cp patch.pdf /workspace/output/
 | 字体引擎 | FontForge |
 | 矢量化 | Potrace |
 | 默认 locale | `C.UTF-8` |
+| 当前版本 | v1.0.2 |
 
 ## 🔧 修复说明
 
@@ -192,6 +194,7 @@ cp patch.pdf /workspace/output/
 | `parse_template.py` | 二值化阈值 `128` → `140` |
 | `parse_template.py` | `decode_qrcode` 增加多尺度放大 + 多阈值重试 |
 | `parse_template.py` | 保存原始灰度图，识别失败时回退 |
+| `parse_template.py` | **连通域分析去掉孤立噪点**，避免噪点撑大字形边界框导致字变小 |
 | `fix_font.py` | 修复 name 表（防止 `guox` 截断）和 OS/2 表（GB2312/GBK） |
 
 ## 📦 构建镜像
@@ -208,37 +211,6 @@ cp patch.pdf /workspace/output/
 docker build -t wefont-cn-lite .
 ```
 
-## 🔐 哈希值校验
-
-| 类型 | 值 |
-| :--- | :--- |
-| 镜像 Digest | `sha256:8104fcf3d482e53254f5cfd2225dd906ac1758a1538d00332c2f896ff52c3979` |
-| tar 文件 SHA256 | `9D94C2A819078721ABC5B64FC40BFF5A6BF790E383969A111B35A98864AFAE94` |
-
-### 验证镜像完整性
-
-拉取镜像后，用以下命令验证 Digest：
-
-```bash
-docker buildx imagetools inspect ghcr.io/yingjie02/wefont-docker:latest
-```
-
-对比输出的 `Digest` 值是否与上表一致。
-
-### 验证 tar 文件完整性
-
-如果你下载了 `wefont-cn-lite.tar`，可以用以下命令校验：
-
-**Windows PowerShell：**
-```powershell
-Get-FileHash wefont-cn-lite.tar -Algorithm SHA256
-```
-
-**Linux / macOS：**
-```bash
-sha256sum wefont-cn-lite.tar
-```
-
 ## ❓ 常见问题
 
 **Q：为什么生成的字体在 Word 里显示为等线？**
@@ -250,6 +222,9 @@ A：本镜像已自动修复字体的 name 表和 OS/2 表，正常情况下不�
 **Q：为什么报 `CANNOT DECODE QRCODE`？**
 A：扫描件二维码不清晰。请用扫描仪重新扫描（300 DPI 以上），或手机正对纸面拍照。**不要用截图**。
 
+**Q：为什么字体里有些字特别小？**
+A：通常是扫描件里混入了孤立小黑点（噪点），导致字形边界框被撑大，字体按边界框缩放时字被"稀释"变小。本镜像的 `parse_template.py` 已用连通域分析自动去掉小噪点，正常情况下不会出现。如果仍然出现，请检查扫描件质量或重新扫描。
+
 **Q：为什么生成的字体名是英文的？**
 A：Python 2.7 脚本处理中文文件名会报 `UnicodeDecodeError`。用英文名生成后，可在字体安装时使用英文名，或在 FontForge 里改字体内部名称。
 
@@ -258,6 +233,9 @@ A：本镜像已设置 `LANG=C.UTF-8` 和 `LC_ALL=C.UTF-8`，正常情况下不�
 
 **Q：要写多少字才能日常使用？**
 A：建议至少 1000 字（`gb2312_1k_常用一千字.txt`）。完整 GB2312 需要写 6763 字，建议分批进行。
+
+**Q：为什么我打印的模板格线很浅？**
+A：原项目模板默认线宽 0.2mm，打印后可能看不清。如果需要更清晰的对齐参考，可以修改 `generate_template.py` 里的 `pdf.set_line_width(0.2)` 为 `0.6`，重新生成模板。注意：加粗格线后扫描时格线可能被提取进字形，需要配合遮罩或形态学处理。
 
 ## 📁 目录结构
 
@@ -284,4 +262,3 @@ A：建议至少 1000 字（`gb2312_1k_常用一千字.txt`）。完整 GB2312 �
 - [FontForge](https://fontforge.org/) — 字体编辑引擎
 - [Potrace](https://potrace.sourceforge.net/) — 位图矢量化工具
 
----
