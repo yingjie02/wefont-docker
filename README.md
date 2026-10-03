@@ -10,38 +10,54 @@ Docker image for **wefont** — 中文个人手写字体生成工具。已修复
 
 - **基础镜像**：Ubuntu 18.04 + venv（精简版，约 487MB）
 - **国内加速**：所有 apt / pip 源已替换为清华源
+- **双版本**：
+  - **基础版**：保留所有笔画细节，不误伤点、顿等小笔画
+  - **去噪版**：追加连通域去噪，解决扫描件噪点导致字变小的问题
 - **自动修复**：
   - `forge_my_font.sh` 的 macOS 路径问题
   - 二维码识别（多尺度放大 + 多阈值重试 + 原始灰度图回退）
-  - 噪点干扰（连通域分析去掉孤立小黑点）
   - 字体 name 表和 OS/2 表（支持中文，Word 可用）
   - Python 3 读取中文文件的 locale 编码问题
 - **精简优化**：删除 matplotlib，多阶段构建，运行阶段不含编译工具
 
 ## 🚀 快速开始
 
-### 从 GHCR 拉取镜像
+### 拉取镜像
+
+本项目提供两个版本：
+
+| 版本 | 标签 | 使用场景 |
+| :--- | :--- | :--- |
+| **基础版** | `latest`, `v1.0.3-base` | 扫描件质量好，或担心降噪误伤笔画 |
+| **去噪版** | `v1.0.3-denoise` | 扫描件有噪点，导致字体里某些字偏小 |
 
 ```bash
+# 基础版
 docker pull ghcr.io/yingjie02/wefont-docker:latest
-```
 
-### 从 tar 文件加载（可选）
-
-如果你拿到的是 `wefont-cn-lite.tar`：
-
-```bash
-docker load -i wefont-cn-lite.tar
-docker tag wefont-cn-lite:latest ghcr.io/yingjie02/wefont-docker:latest
+# 去噪版
+docker pull ghcr.io/yingjie02/wefont-docker:v1.0.3-denoise
 ```
 
 ### 运行容器
 
+**基础版：**
+
 ```bash
-docker run -it --rm -v "你的输出目录:/workspace/output" ghcr.io/yingjie02/wefont-docker:latest
+docker run -it --rm \
+  -v "你的输出目录:/workspace/output" \
+  -v "你的输出目录/input:/workspace/input" \
+  ghcr.io/yingjie02/wefont-docker:latest
 ```
 
-> 将 `你的输出目录` 替换为宿主机上的实际路径，例如 `C:\Users\你的用户名\Desktop\font-output`。
+**去噪版：**
+
+```bash
+docker run -it --rm \
+  -v "你的输出目录:/workspace/output" \
+  -v "你的输出目录/input:/workspace/input" \
+  ghcr.io/yingjie02/wefont-docker:v1.0.3-denoise
+```
 
 ---
 
@@ -57,13 +73,10 @@ docker run -it --rm -v "你的输出目录:/workspace/output" ghcr.io/yingjie02/
 
 ### 第一步：生成模板
 
-进入容器后，选择要书写的字集：
+进入容器后：
 
 ```bash
 cd /workspace/wefont/src
-
-# 查看所有可选字集
-ls config/gb2312_*.txt
 
 # 生成模板（以 25mm 字格为例）
 python generate_template.py config/gb2312.txt -cs 25 -o myfont_25.pdf
@@ -77,94 +90,115 @@ cp myfont_25.pdf /workspace/output/
 | 参数 | 说明 | 推荐值 |
 | :--- | :--- | :--- |
 | `-cs` | 字格大小（mm） | 25（易写），20（平衡），15（页数少） |
-| `-f` | 模板中使用的字体 | 默认 `fireflysung`，一般不用改 |
 | `-o` | 输出文件名 | 自定义 |
-| `-rs` | 去掉格子里的序号 | 可选 |
 
 **可用字集**：
 
-| 文件 | 字数 | 用途 |
-| :--- | :--- | :--- |
-| `gb2312_test_测试集_郭襄小诗_.txt` | 53 | 先导测试，验证流程 |
-| `gb2312_1k_常用一千字.txt` | 1000 | 日常基本够用 |
-| `gb2312_2k_常用二千字.txt` | 2000 | 覆盖大部分场景 |
-| `gb2312_3k_常用三千字.txt` | 3000 | 较完整 |
-| `gb2312_4k_常用四千字.txt` | 4000 | 接近完整 |
-| `gb2312.txt` | 6763 | GB2312 全集 |
+| 文件 | 字数 |
+| :--- | :--- |
+| `gb2312_test_测试集_郭襄小诗_.txt` | 53 |
+| `gb2312_1k_常用一千字.txt` | 1000 |
+| `gb2312_2k_常用二千字.txt` | 2000 |
+| `gb2312_3k_常用三千字.txt` | 3000 |
+| `gb2312_4k_常用四千字.txt` | 4000 |
+| `gb2312.txt` | 6763 |
 
 ### 第二步：打印、手写、扫描
 
 1. **打印**：A4 纸，**100% 缩放**，不要选"适合页面"
-2. **手写**：
-   - 用**黑色签字笔**或**黑色中性笔**（色彩重的笔）
-   - 每个字写在格子**中间**，不要压线
-   - 保持字迹大小一致，力度均匀
-3. **扫描**：
-   - **推荐扫描仪**，300 DPI 以上，输出 **JPG**
-   - 如果手机拍照：正对纸面、光线均匀、避免阴影
-   - **绝对不要用截图**，会导致二维码无法识别
-4. **命名**：按顺序命名，如 `1.jpg`、`2.jpg`、`3.jpg`
-5. **放回**：将 JPG 文件放入宿主机的 `output/input/` 目录
+2. **手写**：黑色签字笔，字写在格子中间，不压线
+3. **扫描**：推荐扫描仪 300 DPI 以上；手机拍照需正对、光线均匀、**不要截图**
+4. **命名**：按顺序命名，如 `1.jpg`、`2.jpg`
+5. **放回**：将 JPG 放入宿主机 `output/input/` 目录
 
 ### 第三步：生成字体
 
-回到容器内执行：
+**基础版生成：**
 
 ```bash
 cd /workspace/wefont/src
-
-# 单个扫描件
-./forge_my_font.sh myfont /workspace/input/1.jpg
-
-# 多个扫描件
-./forge_my_font.sh myfont /workspace/input/1.jpg /workspace/input/2.jpg /workspace/input/3.jpg
-
-# 或用通配符（注意文件顺序）
-./forge_my_font.sh myfont /workspace/input/*.jpg
-
-# 复制到宿主机
-cp myfont.ttf /workspace/output/
+./forge_my_font.sh myfont_base /workspace/input/*.jpg
+cp myfont_base.ttf /workspace/output/
 ```
 
-> **字体名建议用英文**（如 `myfont`），因为 Python 2.7 脚本处理中文文件名会报编码错误。
+**去噪版生成：**
+
+```bash
+cd /workspace/wefont/src
+./forge_my_font.sh myfont_denoise /workspace/input/*.jpg
+cp myfont_denoise.ttf /workspace/output/
+```
+
+> **字体名建议用英文**，因为 Python 2.7 脚本处理中文文件名会报编码错误。
 
 ### 第四步：安装字体（Windows）
 
-1. 打开 `C:\Users\你的用户名\Desktop\font-output`
-2. 右键 `myfont.ttf` → **"为所有用户安装"**
-3. 打开 Word，输入文字，选中后字体设为 `myfont`
+1. 打开 `output` 目录
+2. 右键 `myfont_base.ttf` → **"为所有用户安装"**
+3. 在 Word 里输入文字，选中后字体设为 `myfont_base`
 
-> 生成的字体已自动修复 name 表和 OS/2 表，Word 中可直接使用，不会回退到等线。
+### 第五步：合并筛选（高级用法）
 
-### 第五步：打补丁（写错字或补充新字）
+如果你发现基础版字体中某些字偏小，可以用去噪版替换这些字：
 
-**写错字**：
+#### 5.1 找出偏小的字
 
-1. 把错字整理到一个文件 `错字集.txt`
-2. 生成模板：
+安装 `myfont_base.ttf`，在 Word 里逐个输入你写过的字，记下偏小的字。
+
+#### 5.2 写入筛选文件
+
+创建 `output/replace.json`：
+
+```json
+["的", "我", "了", "好", "一", "字"]
+```
+
+#### 5.3 合并
+
+运行容器，挂载工具目录：
+
+```bash
+docker run -it --rm \
+  -v "你的输出目录:/workspace/output" \
+  -v "项目根目录:/workspace/tools" \
+  ghcr.io/yingjie02/wefont-docker:latest
+```
+
+容器内：
+
+```bash
+python /workspace/tools/replace_glyphs.py \
+    /workspace/output/myfont_base.ttf \
+    /workspace/output/myfont_denoise.ttf \
+    /workspace/output/replace.json \
+    /workspace/output/myfont_final.ttf
+exit
+```
+
+#### 5.4 安装 final 字体
+
+卸载 `myfont_base`，安装 `myfont_final.ttf`。验证：
+
+- 偏小的字应该恢复正常（来自去噪版）
+- 其他字保持原样（来自基础版，笔画未被误伤）
+
+### 第六步：打补丁（写错字或补充新字）
+
+**写错字：**
 
 ```bash
 python generate_template.py 错字集.txt -cs 25 -o patch.pdf
 cp patch.pdf /workspace/output/
+# 打印、手写、扫描后
+./patch_my_font.sh myfont_final.ttf /workspace/input/补丁1.jpg
 ```
 
-3. 打印、手写、扫描后，用 `patch_my_font.sh` 覆盖：
-
-```bash
-./patch_my_font.sh myfont.ttf /workspace/input/补丁1.jpg
-```
-
-**补充新字**（推荐分批策略）：
+**补充新字**（分批策略）：
 
 | 批次 | 字集 | 操作 |
 | :--- | :--- | :--- |
-| 第 1 批 | `gb2312_1k_常用一千字.txt` | `./forge_my_font.sh myfont ...` 生成基础字体 |
-| 第 2 批 | `gb2312_2k_` 中 1k 之后新增的字 | `./patch_my_font.sh myfont.ttf ...` 追加 |
-| 第 3 批 | `gb2312_3k_` 中 2k 之后新增的字 | `./patch_my_font.sh myfont.ttf ...` 追加 |
-| 第 4 批 | `gb2312_4k_` 中 3k 之后新增的字 | `./patch_my_font.sh myfont.ttf ...` 追加 |
-| 第 5+ 批 | `gb2312.txt` 中 4k 之后剩余的字 | `./patch_my_font.sh myfont.ttf ...` 追加 |
-
-分批策略的好处：每批工作量可控，任何一批出问题不影响已有成果，可以随时暂停。
+| 第 1 批 | `gb2312_1k_常用一千字.txt` | `./forge_my_font.sh` 生成基础字体 |
+| 第 2+ 批 | 后续字集新增的字 | `./patch_my_font.sh` 追加 |
 
 ---
 
@@ -179,73 +213,73 @@ cp patch.pdf /workspace/output/
 | 字体引擎 | FontForge |
 | 矢量化 | Potrace |
 | 默认 locale | `C.UTF-8` |
-| 当前版本 | v1.0.2 |
+
+| 版本 | 标签 | 修复内容 |
+| :--- | :--- | :--- |
+| **基础版** | `latest`, `v1.0.3-base` | QR 修复、灰度回退、字体元数据修复 |
+| **去噪版** | `v1.0.3-denoise` | 在基础版上追加连通域去噪 |
 
 ## 🔧 修复说明
 
-原项目在 Linux / Docker 环境下存在若干问题，本镜像已全部修复并固化到构建流程中。
-
 | 文件 | 修复内容 |
 | :--- | :--- |
-| `Dockerfile` | 设置 `LANG=C.UTF-8` 和 `LC_ALL=C.UTF-8`，解决 Python 3.6 读取中文文件的 ASCII 解码错误 |
-| `Dockerfile` | 用 venv 替代 conda，删除 matplotlib，多阶段构建 |
-| `forge_my_font.sh` | macOS 路径 `$(brew --prefix)/bin/python3` → `python2.7` |
-| `forge_my_font.sh` | 生成字体后自动调用 `fix_font.py` 修复元数据 |
-| `parse_template.py` | 二值化阈值 `128` → `140` |
-| `parse_template.py` | `decode_qrcode` 增加多尺度放大 + 多阈值重试 |
-| `parse_template.py` | 保存原始灰度图，识别失败时回退 |
-| `parse_template.py` | **连通域分析去掉孤立噪点**，避免噪点撑大字形边界框导致字变小 |
-| `fix_font.py` | 修复 name 表（防止 `guox` 截断）和 OS/2 表（GB2312/GBK） |
+| `Dockerfile.base` / `Dockerfile.denoise` | `LANG=C.UTF-8` 和 `LC_ALL=C.UTF-8`，解决中文文件读取 |
+| `Dockerfile.base` / `Dockerfile.denoise` | venv 替代 conda，删除 matplotlib，多阶段构建 |
+| `forge_my_font.sh` | macOS 路径 → `python2.7`，自动调用 `fix_font.py` |
+| `parse_template.py` | 阈值 128 → 140，QR 多尺度重试，灰度回退 |
+| `patch_parse_template_denoise.py` | 追加连通域去噪点 |
+| `fix_font.py` | 修复 name 表（防止截断）和 OS/2 表（GB2312/GBK） |
 
-## 📦 构建镜像
+## 📦 自行构建
 
-如需自行构建，请确保当前目录包含以下文件：
+确保当前目录包含以下文件：
 
-- `Dockerfile`
+- `Dockerfile.base`
+- `Dockerfile.denoise`
 - `patch_parse_template.py`
+- `patch_parse_template_denoise.py`
 - `fix_font.py`
 
-然后执行：
-
 ```bash
-docker build -t wefont-cn-lite .
+# 基础版
+docker build -f Dockerfile.base -t wefont-cn-base .
+
+# 去噪版
+docker build -f Dockerfile.denoise -t wefont-cn-denoise .
 ```
 
 ## ❓ 常见问题
 
 **Q：为什么生成的字体在 Word 里显示为等线？**
-A：本镜像已自动修复字体的 name 表和 OS/2 表，正常情况下不会回退。如果仍然回退，请确认：
-1. 字体已通过"为所有用户安装"安装
-2. Word 已完全关闭并重启
-3. 使用字体包含的字符测试（未写的字会回退）
+A：字体已自动修复 name 表和 OS/2 表。如果仍回退，确认：1) 已"为所有用户安装"；2) Word 已重启；3) 使用字体包含的字符测试。
 
 **Q：为什么报 `CANNOT DECODE QRCODE`？**
-A：扫描件二维码不清晰。请用扫描仪重新扫描（300 DPI 以上），或手机正对纸面拍照。**不要用截图**。
+A：扫描件二维码不清晰。用扫描仪 300 DPI 以上重新扫描，或手机正对纸面拍照。**不要用截图**。
+
+**Q：基础版和去噪版怎么选？**
+A：先用基础版生成字体，安装后在 Word 里检查。如果所有字大小正常，就用基础版。如果某些字明显偏小，再用去噪版 + `replace_glyphs.py` 替换这些字。
 
 **Q：为什么字体里有些字特别小？**
-A：通常是扫描件里混入了孤立小黑点（噪点），导致字形边界框被撑大，字体按边界框缩放时字被"稀释"变小。本镜像的 `parse_template.py` 已用连通域分析自动去掉小噪点，正常情况下不会出现。如果仍然出现，请检查扫描件质量或重新扫描。
+A：扫描件里混入了孤立小黑点（噪点），撑大了字形边界框，字体按边界框缩放时字被"稀释"。基础版不处理噪点；去噪版会用连通域分析去掉小噪点。推荐的流程是：基础版为主 + 去噪版替换偏小的字，既能修问题，又不误伤点、顿等笔画。
 
 **Q：为什么生成的字体名是英文的？**
-A：Python 2.7 脚本处理中文文件名会报 `UnicodeDecodeError`。用英文名生成后，可在字体安装时使用英文名，或在 FontForge 里改字体内部名称。
-
-**Q：为什么 Python 3 脚本报 `UnicodeDecodeError: 'ascii' codec`？**
-A：本镜像已设置 `LANG=C.UTF-8` 和 `LC_ALL=C.UTF-8`，正常情况下不会出现。如果你使用的是旧版镜像，请在命令前加 `LC_ALL=C.UTF-8`。
+A：Python 2.7 脚本处理中文文件名会报 `UnicodeDecodeError`。用英文名生成即可。
 
 **Q：要写多少字才能日常使用？**
-A：建议至少 1000 字（`gb2312_1k_常用一千字.txt`）。完整 GB2312 需要写 6763 字，建议分批进行。
-
-**Q：为什么我打印的模板格线很浅？**
-A：原项目模板默认线宽 0.2mm，打印后可能看不清。如果需要更清晰的对齐参考，可以修改 `generate_template.py` 里的 `pdf.set_line_width(0.2)` 为 `0.6`，重新生成模板。注意：加粗格线后扫描时格线可能被提取进字形，需要配合遮罩或形态学处理。
+A：建议至少 1000 字。完整 GB2312 需要写 6763 字，建议分批进行。
 
 ## 📁 目录结构
 
 ```
 .
-├── Dockerfile                  # 镜像构建文件
-├── patch_parse_template.py     # parse_template.py 修复补丁
-├── fix_font.py                 # 字体元数据修复脚本
-├── README.md                   # 本文件
-└── .gitignore                  # Git 忽略规则
+├── Dockerfile.base                  # 基础版镜像
+├── Dockerfile.denoise               # 去噪版镜像
+├── patch_parse_template.py          # 基础版补丁
+├── patch_parse_template_denoise.py  # 去噪版补丁
+├── fix_font.py                      # 字体元数据修复
+├── replace_glyphs.py                # 合并脚本（运行时挂载）
+├── README.md
+└── .gitignore
 ```
 
 ## 🤝 贡献
@@ -261,4 +295,3 @@ A：原项目模板默认线宽 0.2mm，打印后可能看不清。如果需要�
 - [wefont](https://github.com/wenzhenl/wefont) — 原始项目
 - [FontForge](https://fontforge.org/) — 字体编辑引擎
 - [Potrace](https://potrace.sourceforge.net/) — 位图矢量化工具
-

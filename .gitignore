@@ -1,5 +1,3 @@
-@"
-# 大文件，不上传
 *.tar
 output/
 *.ttf
@@ -7,12 +5,7 @@ output/
 *.pdf
 *.docx
 *.doc
-
-# Python 缓存
 __pycache__/
 *.pyc
-
-# 系统文件
 Thumbs.db
 .DS_Store
-"@ | Out-File -Encoding utf8 .gitignore
